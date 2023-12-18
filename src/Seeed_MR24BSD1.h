@@ -4,7 +4,16 @@
 
 #define MAX_DATA_LEN   12    // bytes
 #define HEADER         0x55  // Data frame header
-#define LENGHT_INDEX   0x01  // Data byte index in frame
+#define LENGHT_INDEX    1     // Lenght byte index in frame
+#define CMD_INDEX       3
+#define ADDR_1_INDEX    4
+#define ADDR_2_INDEX    5
+#define DATA_INDEX      6
+#define ID_LEN         12
+#define SOFT_VER_LEN   10
+#define HARD_VER_LEN    8
+#define PROTO_VER_LEN   8
+#define PRINT_RAW      true  // Print raw data bytes
 // Function codes:
 #define READ           0x01
 #define WRITE          0x02
@@ -63,6 +72,17 @@
 
 class Seeed_MR24BSD1{
  private:
+        uint8_t device_id[ID_LEN] = {0};
+        uint8_t software_ver[SOFT_VER_LEN] = {0};
+        uint8_t hardware_ver[HARD_VER_LEN] = {0};
+        uint8_t protocol_ver[PROTO_VER_LEN] = {0};
+
+        void read();
+        void process_data();
+        void process_03();
+        void process_03_01();
+        void process_04();
+        void process_05();
 
  public:
         uint8_t data_frame_len = MAX_DATA_LEN;
@@ -71,7 +91,7 @@ class Seeed_MR24BSD1{
 
         void begin();
         void begin(uint rx_pin, uint tx_pin);
-        void loop();
+        void loop(bool print_raw = false);
         void print();
         void print(uint8_t data[]);
 

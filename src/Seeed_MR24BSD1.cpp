@@ -4,7 +4,7 @@
 
 #ifdef __AVR__
     #include <SoftwareSerial.h>
-    SoftwareSerial SSerial(2, 3); // RX, TX
+    SoftwareSerial SSerial(2, 3);  // RX, TX
     #define Serial1 SSerial
 #endif
 
@@ -21,10 +21,23 @@ void Seeed_MR24BSD1::begin(uint rx_pin, uint tx_pin) {
 /*
   Receive data and process
 */
-void Seeed_MR24BSD1::loop() {
+void Seeed_MR24BSD1::loop(bool print_raw) {
+  read();
+
+  if (is_new_data) {
+    if (print_raw) {
+      print();
+    }
+    process_data();
+    is_new_data = false;
+  }
+}
+
+
+void Seeed_MR24BSD1::read() {
   static bool is_receiving = false;
-  static uint8_t i = 1;  // 0 is a header
-  uint len = MAX_DATA_LEN;
+  static uint8_t i = 0;
+  static uint8_t len = MAX_DATA_LEN;
 
   uint8_t new_byte;
 
@@ -32,31 +45,31 @@ void Seeed_MR24BSD1::loop() {
     new_byte = Serial1.read();
 
     if (is_receiving) {
-
-      if (i == LENGHT_INDEX) {
-        len = data_frame[LENGHT_INDEX];
-        i++;
-      }
-      else if (len > i) {
-        Serial.print(new_byte, HEX);
-        Serial.print(' ');
+      if (i < len) {
+        i++;  // start from 1
         data_frame[i] = new_byte;
-        i++;
+
+        // Andmete suurus
+        if (i == LENGHT_INDEX) {
+          // Juhul, kui data byte on suurem, kui tohib olla!
+          if (new_byte > MAX_DATA_LEN) {
+            len = MAX_DATA_LEN;
+          } else {
+            len = new_byte;
+          }
+        }
       } else {
         is_receiving = false;
         i = 0;
         is_new_data = true;
       }
-    } else if (new_byte == HEADER) {
-      // Waiting for the first frame to arrive
+    } else if (new_byte == HEADER) {  // data frame first byte
       is_receiving = true;
       data_frame[0] = HEADER;
-      Serial.println();
-      Serial.print(new_byte, HEX);
-      Serial.print(' ');
     }
   }
 }
+
 
 /*
 Serial Print data frame
@@ -84,6 +97,97 @@ void Seeed_MR24BSD1::print(uint8_t data[]) {
   Serial.println();
 }
 
+void Seeed_MR24BSD1::process_data() {
+  int lenght = data_frame[LENGHT_INDEX];
+  int cmd = data_frame[CMD_INDEX];
+
+  switch (cmd) {
+    case 0x03:
+      // passive reporting
+      process_03();
+      break;
+    case 0x04:
+      // proactive reporting
+      process_04();
+      break;
+    case 0x05:
+      // sleeping data
+      process_05();
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_03() {
+  // Serial.println("passive reporting");
+  int addr_1 = data_frame[ADDR_1_INDEX];
+  int addr_2 = data_frame[ADDR_2_INDEX];
+
+  switch (addr_1) {
+    case 0x01:
+      process_03_01();
+      break;
+    case 0x03:
+      process_03_03();
+      break;
+    case 0x04:
+      break;
+    case 0x05:
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_03_01() {
+  Serial.print("Device ");
+  int addr_2 = data_frame[ADDR_2_INDEX];
+
+  switch (addr_2) {
+    case 0x01:
+      Serial.println("ID");
+      for (int i = 0; i < ID_LEN; i++) {
+        device_id[i] = data_frame[DATA_INDEX + i];
+      }
+      break;
+    case 0x03:
+      Serial.println("Software version");
+      for (int i = 0; i < SOFT_VER_LEN; i++) {
+        software_ver[i] = data_frame[DATA_INDEX + i];
+      }
+      break;
+    case 0x04:
+      Serial.println("Hardware version");
+      for (int i = 0; i < HARD_VER_LEN; i++) {
+        hardware_ver[i] = data_frame[DATA_INDEX + i];
+      }
+      break;
+    case 0x05:
+      Serial.println("Protocol version");
+      for (int i = 0; i < PROTO_VER_LEN; i++) {
+        protocol_ver[i] = data_frame[DATA_INDEX + i];
+      }
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_03_01() {
+  Serial.println("Env status ");
+  int addr_2 = data_frame[ADDR_2_INDEX];
+
+  switch (addr_2) {
+    case 0x05:
+      break;
+    case 0x06:
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_04() {
+  Serial.println("proactive reporting");
+}
+
+void Seeed_MR24BSD1::process_05() {
+  Serial.println("sleeping data");
+}
+
 
 // Unpacking of physical parameters
 void Seeed_MR24BSD1::Bodysign_judgment(byte inf[], float Move_min, float Move_max){
@@ -92,6 +196,7 @@ void Seeed_MR24BSD1::Bodysign_judgment(byte inf[], float Move_min, float Move_ma
     unsigned char Byte[4];
     float Float;
   }Float_Byte;
+
   if (inf[3] == ACTIVE_REPORT) {
     if (inf[5] == BODYSIGN) {
         Float_Byte fb;
