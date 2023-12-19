@@ -2,6 +2,8 @@
 
 Arduino library for Seeed MR24BSD1 sensor.
 
+![](img/radar.jpg)
+
 ## Example
 
 Tested on Raspberry Pi Pico.
