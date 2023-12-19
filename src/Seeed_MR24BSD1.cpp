@@ -171,7 +171,7 @@ void Seeed_MR24BSD1::process_03_01() {
 }
 
 void Seeed_MR24BSD1::process_03_03() {
-  Serial.println("Env status ");
+  //Serial.println("Env status ");
   int addr_2 = data_frame[ADDR_2_INDEX];
   int data_1 = data_frame[DATA_INDEX];
   int data_2 = data_frame[DATA_INDEX+1];
@@ -199,8 +199,8 @@ void Seeed_MR24BSD1::process_03_03() {
       signs_parameter.Byte[1] = data_frame[DATA_INDEX+1];
       signs_parameter.Byte[2] = data_frame[DATA_INDEX+2];
       signs_parameter.Byte[3] = data_frame[DATA_INDEX+3];
-      Serial.print("Signs parameter: ");
-      Serial.println(signs_parameter.Float);
+      //Serial.print("Signs parameter: ");
+      //Serial.println(signs_parameter.Float);
       break;
   }
 }
@@ -240,7 +240,7 @@ void Seeed_MR24BSD1::process_03_05() {
 }
 
 void Seeed_MR24BSD1::process_04() {
-  Serial.println("proactive reporting");
+  //Serial.println("proactive reporting");
   int addr_1 = data_frame[ADDR_1_INDEX];
 
   switch (addr_1) {
@@ -281,8 +281,8 @@ void Seeed_MR24BSD1::process_04_03() {
       signs_parameter.Byte[1] = data_frame[DATA_INDEX+1];
       signs_parameter.Byte[2] = data_frame[DATA_INDEX+2];
       signs_parameter.Byte[3] = data_frame[DATA_INDEX+3];
-      Serial.print("Signs parameter: ");
-      Serial.println(signs_parameter.Float);
+      //Serial.print("Signs parameter: ");
+      //Serial.println(signs_parameter.Float);
       break;
     case 0x07:
       // approaching
@@ -325,7 +325,7 @@ void Seeed_MR24BSD1::process_04_05() {
 
 
 void Seeed_MR24BSD1::process_05() {
-  Serial.println("sleeping data");
+  //Serial.println("sleeping data");
   int addr_1 = data_frame[ADDR_1_INDEX];
 
   switch (addr_1) {
@@ -425,6 +425,223 @@ uint Seeed_MR24BSD1::calculate_time(uint8_t b1,
   return time;
 }
 
+/*
+Returns;
+NOBODY   0x00
+STATIC   0x01
+MOVMENT  0x02
+*/
+int Seeed_MR24BSD1::get_status() {
+  return status;
+}
+
+/*
+*/
+float Seeed_MR24BSD1::get_signs_parameter() {
+  return signs_parameter.Float;
+}
+
+/*
+Returns 1-10
+*/
+int Seeed_MR24BSD1::get_threshold() {
+  return threshold;
+}
+
+/*
+Returns:
+0 - default
+1 - area detection, top loading
+2 - bathroom, top mounted
+3 - bedroom, top loading
+4 - living room, top mounted
+5 - office, top loading
+6 - hotel, top loading
+*/
+int Seeed_MR24BSD1::get_scene_setting() {
+  return scene_setting;
+}
+
+/*
+Returns:
+1 - None
+2 - Approch
+3 - Far away
+*/
+int Seeed_MR24BSD1::get_distance() {
+  return distance;
+}
+
+/**/
+int Seeed_MR24BSD1::get_breathing_rate() {
+  return breathing_rate;
+}
+
+/*
+Returns:
+0 - Normal
+1 - breath-holding abnormality
+2 - No
+3 - ???
+4 - Movment abnormalities
+5 - Shortness of breath abnormal
+*/
+int Seeed_MR24BSD1::get_breathing_status() {
+  return breathing_status;
+}
+
+/*
+Returns:
+0 - out of bed
+1 - in bed
+2 - none
+*/
+int Seeed_MR24BSD1::get_bed_status() {
+ return bed_status;
+}
+
+/*
+Returns:
+0 - awake
+1 - light sleep
+2 - deep sleep
+3 - none
+*/
+int Seeed_MR24BSD1::get_sleep_state() {
+  return sleep_state;
+}
+
+/*
+Returns: minutes
+*/
+int Seeed_MR24BSD1::get_duration_of_wakefulness() {
+  return calculate_time(duration_of_wakefulness[0],
+                        duration_of_wakefulness[1],
+                        duration_of_wakefulness[2],
+                        duration_of_wakefulness[3]);
+}
+
+/*
+Returns: minutes
+*/
+int Seeed_MR24BSD1::get_light_sleep_lenght() {
+  return calculate_time(light_sleep_lenght[0],
+                        light_sleep_lenght[1],
+                        light_sleep_lenght[2],
+                        light_sleep_lenght[3]);
+}
+
+/*
+Returns: minutes
+*/
+int Seeed_MR24BSD1::get_deep_sleep_lenght() {
+  return calculate_time(deep_sleep_lenght[0],
+                        deep_sleep_lenght[1],
+                        deep_sleep_lenght[2],
+                        deep_sleep_lenght[3]);
+}
+
+/*
+*/
+int Seeed_MR24BSD1::get_sleep_quality() {
+  return sleep_quality;
+}
+
+/*
+Returns: times/minutes
+*/
+int Seeed_MR24BSD1::get_heart_rate() {
+  return heart_rate;
+}
+
+/*
+ Compare data sum and calculated sum
+*/
+bool Seeed_MR24BSD1::is_frame_good(const unsigned char f[]) {
+  bool status = true;
+  // TODOD
+  return status;
+}
+
+void Seeed_MR24BSD1::ask_device_id() {
+  // ilma check summita
+  const int len_short = 7;
+  uint8_t cmd_short[len_short] = {HEADER, 0x08, 0x00, 0x01, 0x01, 0x01, 0x00};
+
+  uint8_t cmd_full[len_short+2] = {0};
+  // copy
+  for (int i = 0; i < len_short; i++) {
+    cmd_full[i] = cmd_short[i];
+  }
+
+  unsigned short int crc_data = us_CalculateCrc16(cmd_short, len_short);
+  cmd_full[len_short] = (crc_data & 0xff00) >> 8;
+  cmd_full[len_short+1] = crc_data & 0xff;
+
+  Serial1.write(cmd_full, len_short+2);
+}
+
+void Seeed_MR24BSD1::get_device_id() {
+  ask_device_id();
+
+  Serial.print("Device id:");
+
+  for (int i = 0; i < ID_LEN; i++) {
+    Serial.print(device_id[i]);
+  }
+  Serial.println();
+
+  //char asciiString[12];
+  //hexBytesToAscii(device_id, asciiString);
+  //printf("ASCII: %s\n", asciiString);
+}
+
+void Seeed_MR24BSD1::ask_software_ver() {
+  // ilma check summita
+  const int len_short = 7;
+  uint8_t cmd_short[len_short] = {HEADER, 0x08, 0x00, 0x01, 0x01, 0x02, 0x00};
+
+  uint8_t cmd_full[len_short+2] = {0};
+  // copy
+  for (int i = 0; i < len_short; i++) {
+    cmd_full[i] = cmd_short[i];
+  }
+
+  unsigned short int crc_data = us_CalculateCrc16(cmd_short, len_short);
+  cmd_full[len_short] = (crc_data & 0xff00) >> 8;
+  cmd_full[len_short+1] = crc_data & 0xff;
+
+  Serial1.write(cmd_full, len_short+2);
+}
+
+void Seeed_MR24BSD1::get_software_ver() {
+  ask_software_ver();
+
+  Serial.print("Soft ver:");
+
+  for (int i = 0; i < SOFT_VER_LEN; i++) {
+    Serial.print(software_ver[i]);
+  }
+  Serial.println();
+
+  //char asciiString[12];
+  //hexBytesToAscii(device_id, asciiString);
+  //printf("ASCII: %s\n", asciiString);
+}
+
+void Seeed_MR24BSD1::hexBytesToAscii(const char *hexBytes, char *asciiString) {
+    int i, j;
+    unsigned int byteValue;
+
+    for (i = 0, j = 0; i < 12; i += 2, j++) {
+        sscanf(hexBytes + i, "%2X", &byteValue);  // Read 2 hex digits and convert to decimal
+        asciiString[j] = (char)byteValue;  // Convert decimal value to ASCII character
+    }
+
+    // Null-terminate the ASCII string
+    asciiString[j] = '\0';
+}
+
 ///////////////////////////////////////////////////
 /*************************************************/
 ///////////////////////////////////////////////////
@@ -479,7 +696,8 @@ const unsigned char  cuc_CRCLo[256]= {
   0x41, 0x81, 0x80, 0x40
 };
 
-unsigned short int Seeed_MR24BSD1::us_CalculateCrc16(unsigned char *lpuc_Frame, unsigned short int lus_Len){
+unsigned short int Seeed_MR24BSD1::us_CalculateCrc16(unsigned char *lpuc_Frame,
+                                                     unsigned short int lus_Len) {
   unsigned char luc_CRCHi = 0xFF;
   unsigned char luc_CRCLo = 0xFF;
   int li_Index = 0;
