@@ -1,4 +1,4 @@
-/* Copyright Seeed 2023 */
+/* Copyright Tauno Erik 2023 */
 #include "Arduino.h"
 #include "Seeed_MR24BSD1.h"
 
@@ -37,7 +37,7 @@ void Seeed_MR24BSD1::loop(bool print_raw) {
 void Seeed_MR24BSD1::read() {
   static bool is_receiving = false;
   static uint8_t i = 0;
-  static uint8_t len = MAX_DATA_LEN;
+  static uint8_t len = MAX_FRAME_LEN;
 
   uint8_t new_byte;
 
@@ -52,8 +52,8 @@ void Seeed_MR24BSD1::read() {
         // Andmete suurus
         if (i == LENGHT_INDEX) {
           // Juhul, kui data byte on suurem, kui tohib olla!
-          if (new_byte > MAX_DATA_LEN) {
-            len = MAX_DATA_LEN;
+          if (new_byte > MAX_FRAME_LEN) {
+            len = MAX_FRAME_LEN;
           } else {
             len = new_byte;
           }
@@ -130,8 +130,10 @@ void Seeed_MR24BSD1::process_03() {
       process_03_03();
       break;
     case 0x04:
+      process_03_04();
       break;
     case 0x05:
+      process_03_05();
       break;
   }
 }
@@ -168,298 +170,264 @@ void Seeed_MR24BSD1::process_03_01() {
   }
 }
 
-void Seeed_MR24BSD1::process_03_01() {
+void Seeed_MR24BSD1::process_03_03() {
   Serial.println("Env status ");
   int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+  int data_2 = data_frame[DATA_INDEX+1];
 
   switch (addr_2) {
     case 0x05:
+      switch (data_1) {
+        case 0x00:
+          status = NOBODY;
+          break;
+        case 0x01:
+          switch (data_2) {
+            case 0x00:
+              status = STATIC;
+              break;
+            case 0x01:
+              status = MOVMENT;
+              break;
+          }
+          break;
+      }
       break;
     case 0x06:
+      signs_parameter.Byte[0] = data_frame[DATA_INDEX];
+      signs_parameter.Byte[1] = data_frame[DATA_INDEX+1];
+      signs_parameter.Byte[2] = data_frame[DATA_INDEX+2];
+      signs_parameter.Byte[3] = data_frame[DATA_INDEX+3];
+      Serial.print("Signs parameter: ");
+      Serial.println(signs_parameter.Float);
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_03_04() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+
+  switch (addr_2) {
+    case 0x0c:
+      threshold = data_1;
+      break;
+    case 0x10:
+      scene_setting =  data_1;
+      break;
+    case 0x12:
+      unoccupied_time = data_1;
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_03_05() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+
+  switch (addr_2) {
+    case 0x0d:
+      sleep_func_status = data_1;
+      break;
+    case 0x08:
+      // ota upgrade
+      break;
+    case 0x09:
+      // upgrade package
       break;
   }
 }
 
 void Seeed_MR24BSD1::process_04() {
   Serial.println("proactive reporting");
+  int addr_1 = data_frame[ADDR_1_INDEX];
+
+  switch (addr_1) {
+    case 0x03:
+      process_04_03();
+      break;
+    case 0x05:
+      process_04_05();
+      break;
+  }
 }
+
+void Seeed_MR24BSD1::process_04_03() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+  int data_2 = data_frame[DATA_INDEX+1];
+
+  switch (addr_2) {
+    case 0x05:
+      switch (data_1) {
+        case 0x00:
+          status = NOBODY;
+          break;
+        case 0x01:
+          switch (data_2) {
+            case 0x00:
+              status = STATIC;
+              break;
+            case 0x01:
+              status = MOVMENT;
+              break;
+          }
+          break;
+      }
+      break;
+    case 0x06:
+      signs_parameter.Byte[0] = data_frame[DATA_INDEX];
+      signs_parameter.Byte[1] = data_frame[DATA_INDEX+1];
+      signs_parameter.Byte[2] = data_frame[DATA_INDEX+2];
+      signs_parameter.Byte[3] = data_frame[DATA_INDEX+3];
+      Serial.print("Signs parameter: ");
+      Serial.println(signs_parameter.Float);
+      break;
+    case 0x07:
+      // approaching
+      distance = data_2;
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_04_05() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+  int data_2 = data_frame[DATA_INDEX+1];
+
+  switch (addr_2) {
+    case 0x01:
+      switch (data_1) {
+        case 0x00:
+          status = NOBODY;
+          break;
+        case 0x01:
+          switch (data_2) {
+            case 0x00:
+              status = STATIC;
+              break;
+            case 0x01:
+              status = MOVMENT;
+              break;
+          }
+          break;
+      }
+      break;
+    case 0x02:
+      Serial.println("Abnormal reset!");
+      break;
+    case 0x0a:
+      Serial.println("Initialisation successful!");
+      break;
+  }
+}
+
 
 void Seeed_MR24BSD1::process_05() {
   Serial.println("sleeping data");
-}
+  int addr_1 = data_frame[ADDR_1_INDEX];
 
-
-// Unpacking of physical parameters
-void Seeed_MR24BSD1::Bodysign_judgment(byte inf[], float Move_min, float Move_max){
-  typedef union
-  {
-    unsigned char Byte[4];
-    float Float;
-  }Float_Byte;
-
-  if (inf[3] == ACTIVE_REPORT) {
-    if (inf[5] == BODYSIGN) {
-        Float_Byte fb;
-        fb.Byte[0] = inf[6];
-        fb.Byte[1] = inf[7];
-        fb.Byte[2] = inf[8];
-        fb.Byte[3] = inf[9];
-        print(inf);
-        Serial.println(fb.Float);
-        if (fb.Float >= Move_min && fb.Float < Move_max) {
-          Serial.println("SOMEBODY STOP");
-        }
-        else if (fb.Float < Move_min) {
-          Serial.println("NOBODY");
-        }
-        else if (fb.Float >= Move_max) {
-          Serial.println("SOMEBODY MOVE");
-        }
-        Serial.println("----------------------------");
-    }
-  }
-}
-
-// Judgment of occupied and unoccupied, approach and distance
-void Seeed_MR24BSD1::Situation_judgment(byte inf[]){
-  switch(inf[3]){
-    case ACTIVE_REPORT:
-      switch(inf[4]){
-        case REPORT_RADAR:
-          switch(inf[5]){
-            case ENVIRONMENT:
-              print(inf);
-              switch(inf[6]){
-                case NOBODY:
-                  Serial.println("Radar detects no one.");
-                  Serial.println("----------------------------");
-                  break;
-                case SOMEBODY_BE:
-                  switch(inf[7]){
-                    case SOMEBODY_MOVE:
-                      Serial.println("Radar detects somebody is moving.");
-                      Serial.println("----------------------------");
-                      break;
-                    case SOMEBODY_STOP:
-                      Serial.println("Radar detects somebody is stopping.");
-                      Serial.println("----------------------------");
-                      break;
-                  }
-                  break;
-              }
-              break;
-            case HEARTBEAT:
-              print(inf);
-              switch(inf[6]){
-                case NOBODY:
-                  Serial.println("Radar detects no one.");
-                  Serial.println("----------------------------");
-                  break;
-                case SOMEBODY_BE:
-                  switch(inf[7]){
-                    case SOMEBODY_MOVE:
-                      Serial.println("Radar detects somebody is moving.");
-                      Serial.println("----------------------------");
-                      break;
-                    case SOMEBODY_STOP:
-                      Serial.println("Radar detects somebody is stopping.");
-                      Serial.println("----------------------------");
-                      break;
-                  }
-                  break;
-              }
-              break;
-            case CLOSE_AWAY:
-              print(inf);
-              switch(inf[6]){
-                case CA_BE:
-                  switch(inf[7]){
-                    case CA_BE:
-                      switch(inf[8]){
-                        case CA_BE:
-                          Serial.println("Radar detects no move.");
-                          Serial.println("----------------------------");
-                          break;
-                        case CA_CLOSE:
-                          Serial.println("Radar detects somebody close.");
-                          Serial.println("----------------------------");
-                          break;
-                        case CA_AWAY:
-                          Serial.println("Radar detects somebody away.");
-                          Serial.println("----------------------------");
-                          break;
-                      }
-                      break;
-                  }
-                  break;
-              }
-              break;
-            case ABNOEMAL:
-              print(inf);
-              Serial.println("An exception appears and the reset is complete.");
-              Serial.println("----------------------------");
-              break;
-          }
-          break;
-        case REPORT_OTHER:
-          switch(inf[5]){
-            case ENVIRONMENT || HEARTBEAT:
-              print(inf);
-              switch(inf[6]){
-                case NOBODY:
-                  Serial.println("Radar detects no one.");
-                  Serial.println("----------------------------");
-                  break;
-                case SOMEBODY_BE:
-                  switch(inf[7]){
-                    case SOMEBODY_MOVE:
-                      Serial.println("Radar detects somebody is moving.");
-                      Serial.println("----------------------------");
-                      break;
-                    case SOMEBODY_STOP:
-                      Serial.println("Radar detects somebody is stopping.");
-                      Serial.println("----------------------------");
-                      break;
-                  }
-                  break;
-              }
-              break;
-            case CLOSE_AWAY:
-              print(inf);
-              switch(inf[6]){
-                case CA_BE:
-                  switch(inf[7]){
-                    case CA_BE:
-                      switch(inf[8]){
-                        case CA_BE:
-                          Serial.println("Radar detects no move.");
-                          Serial.println("----------------------------");
-                          break;
-                        case CA_CLOSE:
-                          Serial.println("Radar detects somebody close.");
-                          Serial.println("----------------------------");
-                          break;
-                        case CA_AWAY:
-                          Serial.println("Radar detects somebody away.");
-                          Serial.println("----------------------------");
-                          break;
-                      }
-                      break;
-                  }
-                  break;
-              }
-              break;
-            case ABNOEMAL:
-              print(inf);
-              Serial.println("An exception appears and the reset is complete.");
-              Serial.println("----------------------------");
-              break;
-          }
-          break;
-      }
+  switch (addr_1) {
+    case 0x01:
+      process_05_01();
+      break;
+    case 0x03:
+      process_05_03();
+      break;
+    case 0x04:
+      process_05_04();
+      break;
+    case 0x05:
+      process_05_05();
+      break;
+    case 0x06:
+      process_05_06();
       break;
   }
 }
 
-//Respiratory sleep data frame decoding
-void Seeed_MR24BSD1::Sleep_inf(byte inf[]){
-  switch(inf[3]){
-    case SLEEP_INF:
-      print(inf);
-      switch(inf[4]){
-        case BREATH:
-          switch(inf[5]){
-            case BREATH_RATE:
-              Serial.print("The current detected respiratory rate is: ");
-              Serial.println(inf[6]);
-              break;
-            case CHECK_SIGN:
-              switch(inf[6]){
-                case BREATH_HOLD:
-                  Serial.println("Abnormal breath-holding detected.");
-                  break;
-                case BREATH_NULL:
-                  Serial.println("No detection signal at the moment.");
-                  break;
-                case BREATH_NORMAL:
-                  Serial.println("Normal breathing was detected.");
-                  break;
-                case BREATH_MOVE:
-                  Serial.println("Abnormal motion is detected.");
-                  break;
-                case BREATH_RAPID:
-                  Serial.println("Abnormal shortness of breath was detected.");
-                  break;
-              }
-              break;
-          }
-          break;
-        case SCENARIO:
-          switch(inf[5]){
-            case CLOSE_AWAY_BED:
-              switch(inf[6]){
-                case AWAY_BED:
-                  Serial.println("Detects someone leaving the bed.");
-                  break;
-                case CLOSE_BED:
-                  Serial.println("Detects someone in bed.");
-                  break;
-              }
-              break;
-            case SLEEP_STATE:
-              switch(inf[6]){
-                case AWAKE:
-                  Serial.println("Current user status detected: Awake.");
-                  break;
-                case LIGHT_SLEEP:
-                  Serial.println("Current user status detected: Light sleep.");
-                  break;
-                case DEEP_SLEEP:
-                  Serial.println("Current user status detected: Deep sleep.");
-                  break;
-                case SLEEP_NULL:
-                  Serial.println("Current user status detected: NULL.");
-                  break;
-              }
-              break;
-          }
-          break;
-        case SLEEP_TIME:
-          switch(inf[5]){
-            case AWAKE_TIME:
-              Serial.print("The user's awake time is detected as: ");
-              break;
-            case LIGHT_SLEEP_TIME:
-              Serial.print("The user's light sleep time is detected as: ");
-              break;
-            case DEEP_SLEEP_TIME:
-              Serial.print("The user's deep sleep time is detected as: ");
-              break;
-          }
-          SleepTimeCalculate(inf[6], inf[7], inf[8], inf[9]);
-          break;
-        case SLEEP_QUALITY:
-          switch(inf[5]){
-            case SLEEP_SCORE:
-              Serial.print("Judgment of sleep quality scores");
-              Serial.println(inf[6]);
-              break;
-          }
-          break;
-      }
-      Serial.println("----------------------------");
+void Seeed_MR24BSD1::process_05_01() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+
+  switch (addr_2) {
+    case 0x01:
+      breathing_rate = data_1;
+      break;
+    case 0x04:
+      breathing_status = data_1;
       break;
   }
 }
 
-// Sleep time decoding
-void Seeed_MR24BSD1::SleepTimeCalculate(unsigned char inf1, unsigned char inf2, unsigned char inf3, unsigned char inf4){
-  unsigned int rel = 0;
-  rel = (inf1 <<  24)+(inf2 << 16 )+(inf3 << 8)+(inf4);
-  Serial.println(rel);
+void Seeed_MR24BSD1::process_05_03() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+  int data_1 = data_frame[DATA_INDEX];
+
+  switch (addr_2) {
+    case 0x07:
+      bed_status = data_1;
+      break;
+    case 0x08:
+      sleep_state = data_1;
+      break;
+  }
 }
 
+void Seeed_MR24BSD1::process_05_04() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
 
+  switch (addr_2) {
+    case 0x01:
+      duration_of_wakefulness[0] = data_frame[DATA_INDEX];
+      duration_of_wakefulness[1] = data_frame[DATA_INDEX+1];
+      duration_of_wakefulness[2] = data_frame[DATA_INDEX+2];
+      duration_of_wakefulness[3] = data_frame[DATA_INDEX+3];
+      break;
+    case 0x02:
+      light_sleep_lenght[0] = data_frame[DATA_INDEX];
+      light_sleep_lenght[1] = data_frame[DATA_INDEX+1];
+      light_sleep_lenght[2] = data_frame[DATA_INDEX+2];
+      light_sleep_lenght[3] = data_frame[DATA_INDEX+3];
+      break;
+    case 0x03:
+      deep_sleep_lenght[0] = data_frame[DATA_INDEX];
+      deep_sleep_lenght[1] = data_frame[DATA_INDEX+1];
+      deep_sleep_lenght[2] = data_frame[DATA_INDEX+2];
+      deep_sleep_lenght[3] = data_frame[DATA_INDEX+3];
+      break;
+  }
+}
+
+void Seeed_MR24BSD1::process_05_05() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+
+  if (addr_2 == 0x01) {
+    sleep_quality = data_frame[DATA_INDEX];
+  }
+}
+
+void Seeed_MR24BSD1::process_05_06() {
+  int addr_2 = data_frame[ADDR_2_INDEX];
+
+  if (addr_2 == 0x01) {
+    heart_rate = data_frame[DATA_INDEX];
+  }
+}
+
+uint Seeed_MR24BSD1::calculate_time(uint8_t b1,
+                                    uint8_t b2,
+                                    uint8_t b3,
+                                    uint8_t b4) {
+  uint time = 0;
+  time = (b1 <<  24)+(b2 << 16)+(b3 << 8)+(b4);
+  return time;
+}
+
+///////////////////////////////////////////////////
+/*************************************************/
+///////////////////////////////////////////////////
 
 const unsigned char cuc_CRCHi[256]= {
   0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
@@ -514,12 +482,12 @@ const unsigned char  cuc_CRCLo[256]= {
 unsigned short int Seeed_MR24BSD1::us_CalculateCrc16(unsigned char *lpuc_Frame, unsigned short int lus_Len){
   unsigned char luc_CRCHi = 0xFF;
   unsigned char luc_CRCLo = 0xFF;
-  int li_Index=0;
-  while(lus_Len--){
-    li_Index = luc_CRCLo ^ *( lpuc_Frame++);
-    luc_CRCLo = (unsigned char)( luc_CRCHi ^ cuc_CRCHi[li_Index]);
+  int li_Index = 0;
+  while (lus_Len--) {
+    li_Index = luc_CRCLo ^ * (lpuc_Frame++);
+    luc_CRCLo = (unsigned char)(luc_CRCHi ^ cuc_CRCHi[li_Index]);
     luc_CRCHi = cuc_CRCLo[li_Index];
   }
-  return (unsigned short int )(luc_CRCLo << 8 | luc_CRCHi);
+  return (unsigned short int)(luc_CRCLo << 8 | luc_CRCHi);
 }
 
